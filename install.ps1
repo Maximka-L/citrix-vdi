@@ -305,8 +305,7 @@ if ($needsInstall) {
     Write-Host ""
     $exitCode = if ($instProc.HasExited) { $instProc.ExitCode } else { 0 }
 
-    # 5. Очистка временного файла
-    Remove-Item -Path $TargetFolder -Recurse -Force -ErrorAction SilentlyContinue
+
 
     if ($installedSuccessfully) {
         # Принудительная привязка .ica файлов к wfica32.exe
@@ -333,13 +332,39 @@ if ($needsInstall) {
         Write-Host " [OK] Аудио и микрофон HDX настроены" -ForegroundColor Green
         Write-Host " [OK] Файлы .ica привязаны к Citrix" -ForegroundColor Green
         Write-Host "=================================================================" -ForegroundColor Green
+        # Удаляем временную папку только после успешной установки
+        Remove-Item -Path $TargetFolder -Recurse -Force -ErrorAction SilentlyContinue
     } else {
         Write-Host ""
         Write-Host "[-] ОШИБКА: Citrix не смог зарегистрироваться в системе." -ForegroundColor Red
-        if ($exitCode -eq 1603) {
+        if ($exitCode -eq 40017) {
+            Write-Host "    [!] КОД 40017: ТРЕБУЕТСЯ ПЕРЕЗАГРУЗКА КОМПЬЮТЕРА!" -ForegroundColor Yellow
+            Write-Host "    После удаления предыдущей версии системные драйверы заблокированы Windows." -ForegroundColor Yellow
+            Write-Host "    (Дистрибутив сохранен на диске, заново скачивать 730 МБ не потребуется)." -ForegroundColor Cyan
+            Write-Host ""
+            Write-Host "    ДЕЙСТВИЕ: Перезагрузите компьютер и запустите команду еще раз!" -ForegroundColor Green
+        } elseif ($exitCode -eq 1603) {
             Write-Host "    Код 1603 (Fatal Error): Установка заблокирована антивирусом 360 Total Security!" -ForegroundColor Red
+            Write-Host "    Временно отключите защиту 360 в трее." -ForegroundColor Yellow
         } else {
             Write-Host "    Код выхода: $exitCode. Проверьте карантин/журнал антивируса." -ForegroundColor Yellow
+        }
+
+        # Проверка и вывод последних строк лога
+        $logFiles = Get-ChildItem -Path "$env:TEMP", "$env:LOCALAPPDATA\Citrix" -Filter "*install*.log" -Recurse -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if ($logFiles) {
+            Write-Host ""
+            Write-Host "    Строки из лога инсталлятора ($($logFiles.Name)):" -ForegroundColor DarkGray
+            Get-Content -Path $logFiles.FullName -Tail 6 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray }
+        }
+
+        if (Test-Path $TempInstallerPath) {
+            Write-Host ""
+            Write-Host "Хотите запустить установку в обычном окне мастера (GUI)? (Y/N): " -ForegroundColor Cyan -NoNewline
+            $reply = Read-Host
+            if ($reply -match "^[yydд]$") {
+                Start-Process -FilePath $TempInstallerPath -ArgumentList "/noreboot"
+            }
         }
     }
 }
