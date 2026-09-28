@@ -308,20 +308,32 @@ if ($needsInstall) {
 
 
     if ($installedSuccessfully) {
-        # Принудительная привязка .ica файлов к wfica32.exe
+        # Принудительная многоуровневая привязка .ica файлов к Citrix (HKLM + HKCU + UserChoice)
         $wfica = @(
             "${env:ProgramFiles(x86)}\Citrix\ICA Client\wfica32.exe",
-            "${env:ProgramFiles}\Citrix\ICA Client\wfica32.exe"
+            "${env:ProgramFiles}\Citrix\ICA Client\wfica32.exe",
+            "${env:ProgramFiles(x86)}\Citrix\ICA Client\wfcrun32.exe"
         ) | Where-Object { Test-Path $_ } | Select-Object -First 1
 
         if ($wfica) {
             try {
+                Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.ica\UserChoice" -Force -ErrorAction SilentlyContinue
+                
+                @("HKLM:\SOFTWARE\Classes\.ica", "HKCU:\Software\Classes\.ica") | ForEach-Object {
+                    if (-not (Test-Path $_)) { New-Item -Path $_ -Force -ErrorAction SilentlyContinue | Out-Null }
+                    Set-ItemProperty -Path $_ -Name "(Default)" -Value "Citrix.ICAClientName" -Force -ErrorAction SilentlyContinue
+                    Set-ItemProperty -Path $_ -Name "Content Type" -Value "application/x-ica" -Force -ErrorAction SilentlyContinue
+                }
+
+                @("HKLM:\SOFTWARE\Classes\Citrix.ICAClientName\shell\open\command", "HKCU:\Software\Classes\Citrix.ICAClientName\shell\open\command") | ForEach-Object {
+                    if (-not (Test-Path $_)) { New-Item -Path $_ -Recurse -Force -ErrorAction SilentlyContinue | Out-Null }
+                    Set-ItemProperty -Path $_ -Name "(Default)" -Value "`"$wfica`" `"%1`"" -Force -ErrorAction SilentlyContinue
+                }
+
+                Start-Process -FilePath $wfica -ArgumentList "/setup" -Wait -ErrorAction SilentlyContinue
+
                 cmd.exe /c "assoc .ica=Citrix.ICAClientName >nul 2>&1"
                 cmd.exe /c "ftype Citrix.ICAClientName=`"$wfica`" `"%1`" >nul 2>&1"
-                New-Item -Path "HKLM:\SOFTWARE\Classes\.ica" -Force -ErrorAction SilentlyContinue | Out-Null
-                Set-ItemProperty -Path "HKLM:\SOFTWARE\Classes\.ica" -Name "(Default)" -Value "Citrix.ICAClientName" -Force -ErrorAction SilentlyContinue
-                New-Item -Path "HKLM:\SOFTWARE\Classes\Citrix.ICAClientName\shell\open\command" -Force -ErrorAction SilentlyContinue | Out-Null
-                Set-ItemProperty -Path "HKLM:\SOFTWARE\Classes\Citrix.ICAClientName\shell\open\command" -Name "(Default)" -Value "`"$wfica`" `"%1`"" -Force -ErrorAction SilentlyContinue
             } catch {}
         }
 
