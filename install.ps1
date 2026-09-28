@@ -148,72 +148,7 @@ if ($installedVersion) {
 # ЭТАП 4: СКАЧИВАНИЕ, ЧИСТКА И УСТАНОВКА
 # -------------------------------------------------------------------------
 if ($needsInstall) {
-    # 1. Скачивание инсталлятора с GitHub Releases
-    Write-Host "[5/6] Загрузка дистрибутива Citrix с GitHub Releases (~730 МБ)..." -ForegroundColor Yellow
-    Write-Host "   URL: $DownloadUrl" -ForegroundColor Gray
-    
-    $downloadSuccess = $false
-    try {
-        # Используем curl.exe если доступен (быстрее и с наглядным прогрессом)
-        if (Get-Command "curl.exe" -ErrorAction SilentlyContinue) {
-            Write-Host "   Запуск загрузки через curl..." -ForegroundColor Gray
-            & curl.exe -L -# "$DownloadUrl" -o "$TempInstallerPath"
-            if ((Test-Path $TempInstallerPath) -and (Get-Item $TempInstallerPath).Length -gt 100000000) {
-                $downloadSuccess = $true
-            }
-        }
-    } catch {}
-
-    if (-not $downloadSuccess) {
-        try {
-            Write-Host "   Запуск загрузки через BITS / WebClient..." -ForegroundColor Gray
-            $webclient = New-Object System.Net.WebClient
-            $webclient.DownloadFile($DownloadUrl, $TempInstallerPath)
-            if ((Test-Path $TempInstallerPath) -and (Get-Item $TempInstallerPath).Length -gt 100000000) {
-                $downloadSuccess = $true
-            }
-        } catch {
-            Write-Host "   [-] Ошибка скачивания: $_" -ForegroundColor Red
-        }
-    }
-
-    if (-not $downloadSuccess) {
-        Write-Host "[-] ОШИБКА: Не удалось загрузить дистрибутив Citrix с GitHub!" -ForegroundColor Red
-        Write-Host "    Проверьте интернет-соединение или наличие релиза по ссылке." -ForegroundColor Yellow
-        Read-Host "Нажмите Enter для выхода..."
-        exit
-    }
-
-    Write-Host "   [OK] Дистрибутив успешно загружен ($([math]::Round((Get-Item $TempInstallerPath).Length / 1MB)) МБ)." -ForegroundColor Green
-
-    # 2. Глубокая нативная чистка старой версии
-    if ($installedVersion) {
-        Write-Host "   Остановка служб и процессов старого Citrix..." -ForegroundColor Yellow
-        Get-Service -Name "*Citrix*", "*Receiver*" -ErrorAction SilentlyContinue | Stop-Service -Force -ErrorAction SilentlyContinue
-        $pList = @("wfica32", "receiver", "SelfService", "SelfServicePlugin", "wfcrun32", "concentr", "AuthManSvr", "CDViewer", "CitrixReceiverUpdater", "ctxworkspaceapp", "redirector", "ctxusbm")
-        foreach ($p in $pList) { Get-Process -Name $p -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue }
-        
-        $app = Get-CitrixApp
-        if ($app -and $app.UninstallString) {
-            try {
-                $u = $app.UninstallString
-                if ($u -match '^"([^"]+)"(.*)$') { $exe = $matches[1]; $args = "$($matches[2]) /silent /cleanup /noreboot" }
-                else { $parts = $u.Split(' ', 2); $exe = $parts[0]; $args = if ($parts.Length -gt 1) { "$($parts[1]) /silent /cleanup /noreboot" } else { "/silent /cleanup /noreboot" } }
-                $null = Start-Process -FilePath $exe -ArgumentList $args -Wait -ErrorAction SilentlyContinue
-            } catch {}
-        }
-        @("HKLM:\SOFTWARE\Citrix", "HKLM:\SOFTWARE\WOW6432Node\Citrix", "HKCU:\SOFTWARE\Citrix") | ForEach-Object {
-            if (Test-Path $_) { Remove-Item -Path $_ -Recurse -Force -ErrorAction SilentlyContinue }
-        }
-        @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall") | ForEach-Object {
-            Get-ChildItem -Path $_ -ErrorAction SilentlyContinue | Where-Object { $_.GetValue("DisplayName") -match "Citrix" -or $_.PSChildName -match "Citrix" } | ForEach-Object { Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue }
-        }
-        @("${env:ProgramFiles(x86)}\Citrix", "${env:ProgramFiles}\Citrix", "${env:ProgramData}\Citrix", "$env:LOCALAPPDATA\Citrix", "$env:APPDATA\Citrix", "$env:TEMP\Citrix*") | ForEach-Object {
-            if (Test-Path $_) { Remove-Item -Path $_ -Recurse -Force -ErrorAction SilentlyContinue }
-        }
-    }
-
-    # 3. Проверка 360 Total Security
+    # 1. Проверка 360 Total Security
     $av360 = Get-Process -Name "360tray", "360sd", "ZHPRTP", "ZhuDongFangYu", "360rp", "360Safe" -ErrorAction SilentlyContinue
     if ($av360) {
         Write-Host ""
@@ -234,8 +169,85 @@ if ($needsInstall) {
         Write-Host ""
     }
 
+    # 2. Глубокая нативная чистка старой версии (ВЫПОЛНЯЕТСЯ ДО СКАЧИВАНИЯ НОВОЙ)
+    if ($installedVersion) {
+        Write-Host "[5/7] Глубокая очистка предыдущей версии ($installedVersion)..." -ForegroundColor Yellow
+        Write-Host "   Остановка служб и процессов старого Citrix..." -ForegroundColor Gray
+        Get-Service -Name "*Citrix*", "*Receiver*" -ErrorAction SilentlyContinue | Stop-Service -Force -ErrorAction SilentlyContinue
+        $pList = @("wfica32", "receiver", "SelfService", "SelfServicePlugin", "wfcrun32", "concentr", "AuthManSvr", "CDViewer", "CitrixReceiverUpdater", "ctxworkspaceapp", "redirector", "ctxusbm")
+        foreach ($procName in $pList) { Get-Process -Name $procName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue }
+        
+        $app = Get-CitrixApp
+        if ($app -and $app.UninstallString) {
+            try {
+                $u = $app.UninstallString
+                if ($u -match '^"([^"]+)"(.*)$') { $exe = $matches[1]; $args = "$($matches[2]) /silent /cleanup /noreboot" }
+                else { $parts = $u.Split(' ', 2); $exe = $parts[0]; $args = if ($parts.Length -gt 1) { "$($parts[1]) /silent /cleanup /noreboot" } else { "/silent /cleanup /noreboot" } }
+                $null = Start-Process -FilePath $exe -ArgumentList $args -Wait -ErrorAction SilentlyContinue
+            } catch {}
+        }
+        @("HKLM:\SOFTWARE\Citrix", "HKLM:\SOFTWARE\WOW6432Node\Citrix", "HKCU:\SOFTWARE\Citrix") | ForEach-Object {
+            if (Test-Path $_) { Remove-Item -Path $_ -Recurse -Force -ErrorAction SilentlyContinue }
+        }
+        @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall") | ForEach-Object {
+            Get-ChildItem -Path $_ -ErrorAction SilentlyContinue | Where-Object { $_.GetValue("DisplayName") -match "Citrix" -or $_.PSChildName -match "Citrix" } | ForEach-Object { Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue }
+        }
+        @("${env:ProgramFiles(x86)}\Citrix", "${env:ProgramFiles}\Citrix", "${env:ProgramData}\Citrix", "$env:LOCALAPPDATA\Citrix", "$env:APPDATA\Citrix", "$env:TEMP\Citrix*") | ForEach-Object {
+            if (Test-Path $_) { Remove-Item -Path $_ -Recurse -Force -ErrorAction SilentlyContinue }
+        }
+        Write-Host "   [OK] Предыдущая версия полностью зачищена." -ForegroundColor Green
+    }
+
+    # 3. Скачивание дистрибутива в защищенную изолированную папку
+    $TargetFolder = Join-Path $env:TEMP "Citrix_VDI_Setup"
+    if (-not (Test-Path $TargetFolder)) { New-Item -ItemType Directory -Path $TargetFolder -Force | Out-Null }
+    $TempInstallerPath = Join-Path $TargetFolder "CitrixWorkspaceFullInstaller.exe"
+
+    # Если файл уже скачан ранее и его размер корректен (> 500 МБ) - используем повторно
+    $alreadyDownloaded = (Test-Path $TempInstallerPath) -and ((Get-Item $TempInstallerPath).Length -gt 500000000)
+
+    if (-not $alreadyDownloaded) {
+        Write-Host "[6/7] Загрузка эталонного дистрибутива Citrix с GitHub (~730 МБ)..." -ForegroundColor Yellow
+        Write-Host "   URL: $DownloadUrl" -ForegroundColor Gray
+        
+        $downloadSuccess = $false
+        try {
+            if (Get-Command "curl.exe" -ErrorAction SilentlyContinue) {
+                Write-Host "   Запуск загрузки через curl..." -ForegroundColor Gray
+                & curl.exe --ssl-no-revoke -L -# "$DownloadUrl" -o "$TempInstallerPath"
+                if ((Test-Path $TempInstallerPath) -and (Get-Item $TempInstallerPath).Length -gt 500000000) {
+                    $downloadSuccess = $true
+                }
+            }
+        } catch {}
+
+        if (-not $downloadSuccess) {
+            try {
+                Write-Host "   Запуск загрузки через BITS / WebClient..." -ForegroundColor Gray
+                $webclient = New-Object System.Net.WebClient
+                $webclient.DownloadFile($DownloadUrl, $TempInstallerPath)
+                if ((Test-Path $TempInstallerPath) -and (Get-Item $TempInstallerPath).Length -gt 500000000) {
+                    $downloadSuccess = $true
+                }
+            } catch {
+                Write-Host "   [-] Ошибка скачивания: $_" -ForegroundColor Red
+            }
+        }
+
+        if (-not $downloadSuccess) {
+            Write-Host "[-] ОШИБКА: Не удалось загрузить дистрибутив Citrix с GitHub!" -ForegroundColor Red
+            Write-Host "    Проверьте интернет-соединение или наличие релиза по ссылке." -ForegroundColor Yellow
+            Read-Host "Нажмите Enter для выхода..."
+            exit
+        }
+
+        Write-Host "   [OK] Дистрибутив успешно сохранен ($([math]::Round((Get-Item $TempInstallerPath).Length / 1MB)) МБ)." -ForegroundColor Green
+    } else {
+        Write-Host "[6/7] Дистрибутив уже загружен ранее ($([math]::Round((Get-Item $TempInstallerPath).Length / 1MB)) МБ), повторное скачивание не требуется." -ForegroundColor Green
+    }
+
     # 4. Установка чистого клиента
-    Write-Host "[6/6] Запуск чистой установки Citrix Workspace..." -ForegroundColor Yellow
+    Write-Host "[7/7] Запуск чистой установки Citrix Workspace..." -ForegroundColor Yellow
     Write-Host "   • App Protection : ОТКЛЮЧЕН" -ForegroundColor Gray
     Write-Host "   • Single Sign-On : ОТКЛЮЧЕН" -ForegroundColor Gray
     Write-Host "   • Аналитика CEIP : ОТКЛЮЧЕНА" -ForegroundColor Gray
@@ -294,7 +306,7 @@ if ($needsInstall) {
     $exitCode = if ($instProc.HasExited) { $instProc.ExitCode } else { 0 }
 
     # 5. Очистка временного файла
-    Remove-Item -Path $TempInstallerPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path $TargetFolder -Recurse -Force -ErrorAction SilentlyContinue
 
     if ($installedSuccessfully) {
         # Принудительная привязка .ica файлов к wfica32.exe
