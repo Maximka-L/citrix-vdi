@@ -123,7 +123,11 @@ if (-not $installedVersion) {
 $reqVer = Convert-ToVersionObject $TargetVersionStr
 $needsInstall = $false
 
-if ($installedVersion) {
+if ($ForceReinstall -or $env:FORCE_CITRIX_REINSTALL -eq "1") {
+    Write-Host "   [РЕЖИМ ПРИНУДИТЕЛЬНОЙ ПЕРЕУСТАНОВКИ]" -ForegroundColor Yellow
+    Write-Host "   -> Полная очистка и переустановка Citrix будут выполнены принудительно!" -ForegroundColor Yellow
+    $needsInstall = $true
+} elseif ($installedVersion) {
     Write-Host "   Текущая версия Citrix        : $installedVersion" -ForegroundColor White
     Write-Host "   Эталонная версия для VDI     : $TargetVersionStr (LTSR CU1)" -ForegroundColor White
 
