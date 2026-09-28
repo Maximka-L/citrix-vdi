@@ -1,4 +1,4 @@
-# 🚀 Citrix Workspace Auto-Installer & VDI Repair (MegaFon)
+# 🚀 Citrix Workspace Auto-Installer & VDI Repair 
 
 Автоматизированный скрипт для тихой веб-установки, глубокой очистки и устранения ошибок подключения к **MegaFon VDI** (`vdi2.megafon.ru`, `ica2-ext.megafon.ru`) на компьютерах под управлением Windows 10 / 11.
 
@@ -49,11 +49,3 @@ powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.c
    - Удаляет временный файл дистрибутива из `%TEMP%`.
 
 ---
-
-## 📁 Структура репозитория
-
-- `install.ps1` — главный скрипт веб-установки (сертификаты уже вшиты в Base64).
-- `run.bat` — запускающий файл для Windows в 1 клик.
-- `russian_trusted_root_ca.cer` — корневой сертификат Минцифры РФ.
-- `russian_trusted_sub_ca.cer` — выпускающий (промежуточный) сертификат Минцифры РФ.
-- `AAACertificateServices.crt` — доверенный корень Sectigo AAA.
