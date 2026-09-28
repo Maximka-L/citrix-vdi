@@ -241,44 +241,57 @@ if ($needsInstall) {
     Write-Host "   • Аналитика CEIP : ОТКЛЮЧЕНА" -ForegroundColor Gray
     Write-Host "   Пожалуйста, подождите 1-3 минуты..." -ForegroundColor Gray
 
-    $args = "/silent /noreboot /forceinstall /includeSSON=false /includeappprotection=false /EnableCEIP=false /AutoUpdateCheck=disabled"
-    $instProc = Start-Process -FilePath $TempInstallerPath -ArgumentList $args -PassThru -Wait
-    $exitCode = $instProc.ExitCode
+    $args = "/silent /noreboot /includeSSON=false /includeappprotection=false /EnableCEIP=false /AutoUpdateCheck=disabled"
+    $instProc = Start-Process -FilePath $TempInstallerPath -ArgumentList $args -PassThru
 
-    # Ожидание и проверка
-    Write-Host "   Ожидание регистрации файлов и реестра Citrix..." -NoNewline
+    Write-Host "   Идет процесс установки" -NoNewline
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $maxWaitSec = 240 # максимум 4 минуты
     $installedSuccessfully = $false
     $detectedVer = $null
 
-    for ($i = 1; $i -le 15; $i++) {
-        Start-Sleep -Seconds 2
+    while ($sw.Elapsed.TotalSeconds -lt $maxWaitSec) {
+        Start-Sleep -Seconds 3
         Write-Host "." -NoNewline
 
+        # Проверка наличия исполняемого файла wfica32.exe
+        $wfica = @(
+            "${env:ProgramFiles(x86)}\Citrix\ICA Client\wfica32.exe",
+            "${env:ProgramFiles}\Citrix\ICA Client\wfica32.exe"
+        ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+        if ($wfica) {
+            $verInfo = (Get-Item $wfica).VersionInfo.ProductVersion
+            if ($verInfo) { $detectedVer = $verInfo }
+        }
+
+        # Проверка регистрации в реестре
         $finalApp = Get-CitrixApp
         if ($finalApp -and $finalApp.DisplayVersion) {
             $detectedVer = $finalApp.DisplayVersion
-            $installedSuccessfully = $true
-            break
         }
 
-        $wficaCandidates = @(
-            "${env:ProgramFiles(x86)}\Citrix\ICA Client\wfica32.exe",
-            "${env:ProgramFiles}\Citrix\ICA Client\wfica32.exe"
-        )
-        foreach ($f in $wficaCandidates) {
-            if (Test-Path $f) {
-                $verInfo = (Get-Item $f).VersionInfo.ProductVersion
-                if ($verInfo) {
-                    $detectedVer = $verInfo
-                    $installedSuccessfully = $true
-                    break
-                }
+        if ($detectedVer) {
+            if ($instProc.HasExited) {
+                $installedSuccessfully = $true
+                break
+            }
+            # Если бинарники уже на месте и msiexec закончил активную работу
+            $msiActive = Get-Process -Name "msiexec" -ErrorAction SilentlyContinue
+            if (-not $msiActive) {
+                Start-Sleep -Seconds 4
+                $installedSuccessfully = $true
+                break
             }
         }
 
-        if ($installedSuccessfully) { break }
+        if ($instProc.HasExited -and -not $detectedVer) {
+            Start-Sleep -Seconds 3
+            break
+        }
     }
     Write-Host ""
+    $exitCode = if ($instProc.HasExited) { $instProc.ExitCode } else { 0 }
 
     # 5. Очистка временного файла
     Remove-Item -Path $TempInstallerPath -Force -ErrorAction SilentlyContinue
