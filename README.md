@@ -30,7 +30,7 @@ powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.c
    - Включает двунаправленную передачу звука и микрофона (`EnableAudioInput = 1`, `Audio = On`).
 
 3. **Проверка версии и дистрибутив:**
-   - Проверяет текущую версию Citrix Workspace (требуемая: `24.2.4001+` LTSR CU1).
+   - Проверяет текущую версию Citrix Workspace (требуемая: `24.2.4000.4020+` LTSR CU1).
    - Если версия устарела или отсутствует, скачивает установщик напрямую из [Releases](https://github.com/Maximka-L/citrix-vdi/releases) с наглядным прогресс-баром.
 
 4. **Глубокая нативная зачистка (Deep Cleanup):**

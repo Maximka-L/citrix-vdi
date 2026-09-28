@@ -20,7 +20,7 @@ Write-Host "=================================================================" -
 Write-Host ""
 
 $DownloadUrl = "https://github.com/Maximka-L/citrix-vdi/releases/download/v1.0/CitrixWorkspaceFullInstaller.exe"
-$TargetVersionStr = "24.2.4001"
+$TargetVersionStr = "24.2.4000.4020"
 $TempInstallerPath = Join-Path $env:TEMP "CitrixWorkspaceFullInstaller.exe"
 
 # -------------------------------------------------------------------------
