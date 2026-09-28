@@ -124,12 +124,19 @@ $reqVer = Convert-ToVersionObject $TargetVersionStr
 $needsInstall = $false
 
 if ($installedVersion) {
+    Write-Host "   Текущая версия Citrix        : $installedVersion" -ForegroundColor White
+    Write-Host "   Эталонная версия для VDI     : $TargetVersionStr (LTSR CU1)" -ForegroundColor White
+
     $instVer = Convert-ToVersionObject $installedVersion
-    if ($instVer -and $reqVer -and ($instVer -ge $reqVer)) {
-        Write-Host "   [АКТУАЛЬНА] Версия Citrix v$installedVersion >= $TargetVersionStr." -ForegroundColor Green
+    $isMatch = ($installedVersion -like "24.2.4000*") -or ($instVer -and $instVer.Major -eq 24 -and $instVer.Minor -eq 2 -and $instVer.Build -eq 4000)
+
+    if ($isMatch) {
+        Write-Host "   [АКТУАЛЬНА] Установлена эталонная версия ($installedVersion)." -ForegroundColor Green
         Write-Host "   Переустановка не требуется!" -ForegroundColor Green
     } else {
-        Write-Host "   [УСТАРЕЛА] Обнаружена версия v$installedVersion < $TargetVersionStr." -ForegroundColor Red
+        Write-Host "   [НЕСООТВЕТСТВИЕ ВЕРСИИ] Обнаружена версия $installedVersion." -ForegroundColor Red
+        Write-Host "   Для VDI МегаФона требуется строго $TargetVersionStr." -ForegroundColor Yellow
+        Write-Host "   -> Запуск полной зачистки и установка эталонной версии..." -ForegroundColor Yellow
         $needsInstall = $true
     }
 } else {
