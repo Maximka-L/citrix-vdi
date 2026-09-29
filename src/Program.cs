@@ -11,7 +11,7 @@ static class Program
         {
             ProcessStartInfo psi = new ProcessStartInfo();
             psi.FileName = "powershell.exe";
-            psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -Command \"irm https://raw.githubusercontent.com/Maximka-L/citrix-vdi/main/install.ps1 | iex\"";
+            psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -Command \"$p = Join-Path $env:TEMP 'citrix_install.ps1'; try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object System.Net.WebClient).DownloadFile('https://raw.githubusercontent.com/Maximka-L/citrix-vdi/main/install.ps1', $p); Unblock-File $p -ErrorAction SilentlyContinue; & $p } catch { Write-Host $_; Read-Host }\"";
             psi.Verb = "runas";
             psi.UseShellExecute = true;
             psi.WindowStyle = ProcessWindowStyle.Normal;
