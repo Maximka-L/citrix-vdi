@@ -257,12 +257,12 @@ if ($needsInstall) {
     Write-Host "   • Аналитика CEIP : ОТКЛЮЧЕНА" -ForegroundColor Gray
     Write-Host "   Пожалуйста, подождите 1-3 минуты..." -ForegroundColor Gray
 
-    $args = "/silent /noreboot /includeSSON=false /includeappprotection=false /EnableCEIP=false /AutoUpdateCheck=disabled"
+    $args = "/silent /noreboot /forceinstall /includeSSON=false /includeappprotection=false /EnableCEIP=false /AutoUpdateCheck=disabled"
     $instProc = Start-Process -FilePath $TempInstallerPath -ArgumentList $args -PassThru
 
     Write-Host "   Идет процесс установки" -NoNewline
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    $maxWaitSec = 240 # максимум 4 минуты
+    $maxWaitSec = 300 # максимум 5 минут
     $installedSuccessfully = $false
     $detectedVer = $null
 
@@ -287,22 +287,24 @@ if ($needsInstall) {
             $detectedVer = $finalApp.DisplayVersion
         }
 
+        # Проверяем, идут ли активные процессы инсталляции
+        $activeInstallers = Get-Process -Name "msiexec", "TrolleyExpress", "CitrixWorkspaceApp", "CitrixWorkspaceFullInstaller" -ErrorAction SilentlyContinue
+
         if ($detectedVer) {
-            if ($instProc.HasExited) {
-                $installedSuccessfully = $true
-                break
-            }
-            # Если бинарники уже на месте и msiexec закончил активную работу
-            $msiActive = Get-Process -Name "msiexec" -ErrorAction SilentlyContinue
-            if (-not $msiActive) {
-                Start-Sleep -Seconds 4
+            if (-not $activeInstallers) {
+                Start-Sleep -Seconds 3
                 $installedSuccessfully = $true
                 break
             }
         }
 
-        if ($instProc.HasExited -and -not $detectedVer) {
-            Start-Sleep -Seconds 3
+        if ($instProc.HasExited -and -not $activeInstallers) {
+            Start-Sleep -Seconds 4
+            $finalApp = Get-CitrixApp
+            if ($finalApp -and $finalApp.DisplayVersion) {
+                $detectedVer = $finalApp.DisplayVersion
+                $installedSuccessfully = $true
+            }
             break
         }
     }
@@ -366,8 +368,10 @@ if ($needsInstall) {
             Write-Host "    Код выхода: $exitCode. Проверьте карантин/журнал антивируса." -ForegroundColor Yellow
         }
 
-        # Проверка и вывод последних строк лога
-        $logFiles = Get-ChildItem -Path "$env:TEMP", "$env:LOCALAPPDATA\Citrix" -Filter "*install*.log" -Recurse -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        # Проверка и вывод последних строк лога Citrix
+        $logFiles = Get-ChildItem -Path "$env:TEMP", "$env:LOCALAPPDATA\Citrix" -Recurse -ErrorAction SilentlyContinue | 
+            Where-Object { ($_.Name -match "Citrix|TrolleyExpress|CTX|Receiver|wfica") -and ($_.Name -match "\.log$") -and ($_.Name -notmatch "Adobe|CCLibrary") } | 
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
         if ($logFiles) {
             Write-Host ""
             Write-Host "    Строки из лога инсталлятора ($($logFiles.Name)):" -ForegroundColor DarkGray
