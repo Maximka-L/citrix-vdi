@@ -1,5 +1,5 @@
 # Игнорировать тяжелые бинарники в Git-коммитах (они должны загружаться в Releases)
-*.exe
+CitrixWorkspaceFullInstaller.exe
 *.msi
 *.zip
 *.log
