@@ -2,12 +2,21 @@
 # CITRIX WORKSPACE WEB INSTALLER & REPAIR (MEGAFON VDI)
 # Репозиторий: https://github.com/Maximka-L/citrix-vdi
 # =========================================================================
+param(
+    [switch]$ForceReinstall,
+    [switch]$SkipCerts,
+    [switch]$InstallCerts
+)
 
 # Самоповышение прав администратора (UAC)
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
     Write-Host "[!] Запрос прав Администратора..." -ForegroundColor Yellow
-    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$((Get-Item (Get-PSCallStack)[0].InvocationInfo.PSCommandPath).FullName)`"" -Verb RunAs
+    $scriptCmd = if ($MyInvocation.PSCommandPath) { "-File `"$($MyInvocation.PSCommandPath)`"" } else { "-Command `"irm https://raw.githubusercontent.com/Maximka-L/citrix-vdi/main/install.ps1 | iex`"" }
+    if ($ForceReinstall) { $scriptCmd += " -ForceReinstall" }
+    if ($SkipCerts) { $scriptCmd += " -SkipCerts" }
+    if ($InstallCerts) { $scriptCmd += " -InstallCerts" }
+    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass $scriptCmd" -Verb RunAs
     exit
 }
 
@@ -32,7 +41,36 @@ try {
 # -------------------------------------------------------------------------
 # ЭТАП 1: УСТАНОВКА СЕРТИФИКАТОВ (Минцифры РФ + Sectigo AAA) И СБРОС КЭШЕЙ
 # -------------------------------------------------------------------------
-Write-Host "[1/6] Установка доверенных корневых сертификатов..." -ForegroundColor Yellow
+$doInstallCerts = $true
+
+if ($SkipCerts -or $env:SKIP_CERTS -eq "1") {
+    $doInstallCerts = $false
+    Write-Host "[1/6] Установка сертификатов пропущена (ключ SkipCerts)." -ForegroundColor DarkGray
+    Write-Host "[2/6] Сброс сетевых кэшей отзыва пропущен." -ForegroundColor DarkGray
+} elseif ($InstallCerts -or $env:INSTALL_CERTS -eq "1") {
+    $doInstallCerts = $true
+} else {
+    Write-Host "-----------------------------------------------------------------" -ForegroundColor Gray
+    Write-Host " [?] СЕРТИФИКАТЫ БЕЗОПАСНОСТИ (Минцифры РФ + Sectigo AAA)" -ForegroundColor Cyan
+    Write-Host "     Требуются для входа в MegaFon VDI и устранения ошибок SSL 61 / SSL 4." -ForegroundColor Gray
+    Write-Host " Установить сертификаты? [Y/N] (По умолчанию: Y): " -ForegroundColor Yellow -NoNewline
+    $ans = Read-Host
+    if ($ans -match "^[nNнН]$") {
+        $doInstallCerts = $false
+        Write-Host " -> Установка сертификатов пропущена пользователем." -ForegroundColor Yellow
+        Write-Host "-----------------------------------------------------------------" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "[1/6] Установка сертификатов пропущена." -ForegroundColor DarkGray
+        Write-Host "[2/6] Настройка сетевых кэшей и отзыва пропущена." -ForegroundColor DarkGray
+    } else {
+        Write-Host " -> Установка сертификатов подтверждена." -ForegroundColor Green
+        Write-Host "-----------------------------------------------------------------" -ForegroundColor Gray
+        Write-Host ""
+    }
+}
+
+if ($doInstallCerts) {
+    Write-Host "[1/6] Установка доверенных корневых сертификатов..." -ForegroundColor Yellow
 
 $certs = @(
     @{ Name = "Минцифры РФ (Корневой)"; Store = "Root"; B64 = "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tDQpNSUlGd2pDQ0E2cWdBd0lCQWdJQ0VBQXdEUVlKS29aSWh2Y05BUUVMQlFBd2NERUxNQWtHQTFVRUJoTUNVbFV4DQpQekE5QmdOVkJBb01ObFJvWlNCTmFXNXBjM1J5ZVNCdlppQkVhV2RwZEdGc0lFUmxkbVZzYjNCdFpXNTBJR0Z1DQpaQ0JEYjIxdGRXNXBZMkYwYVc5dWN6RWdNQjRHQTFVRUF3d1hVblZ6YzJsaGJpQlVjblZ6ZEdWa0lGSnZiM1FnDQpRMEV3SGhjTk1qSXdNekF4TWpFd05ERTFXaGNOTXpJd01qSTNNakV3TkRFMVdqQndNUXN3Q1FZRFZRUUdFd0pTDQpWVEUvTUQwR0ExVUVDZ3cyVkdobElFMXBibWx6ZEhKNUlHOW1JRVJwWjJsMFlXd2dSR1YyWld4dmNHMWxiblFnDQpZVzVrSUVOdmJXMTFibWxqWVhScGIyNXpNU0F3SGdZRFZRUUREQmRTZFhOemFXRnVJRlJ5ZFhOMFpXUWdVbTl2DQpkQ0JEUVRDQ0FpSXdEUVlKS29aSWh2Y05BUUVCQlFBRGdnSVBBRENDQWdvQ2dnSUJBTWZGT1o4cFVBTDMrcjJuDQpxcUUwWnA1MnNlbFhzS0dGWW9HMEdNNWJ3ejFiU0Z0Q3QrQVpRTWhrV1FoZUkzcG9aQVRvWUp1NjlwSExLUzZRDQpYQml3QkMxY3Z6WW1VWUtNWVpDN2pFNVloRVUyYlNMMG1YN05hTXhNRG1IMi9Od3VPVlJqOE9JbVZhNXMxRjRVDQp6bjRLdjNQRmxEQmpqU2pYS1ZZOWttalVCc1hRcklIZWFxbVVJc1BJbE5XVW5pbVhTMEkwYWJFeHFrYmRyWGJYDQpZd0NPWGhPTzJwRFV4M2NrbUpsQ01VR2FjVVRueWx5UVcyVnNKSXlJR0E4VjB4emRhZVVYZzBWWjZabU5VcjVZDQpCZXIvRUFPTFBiOE5ZcHNBaEplMm1Yak1CL0o5SE5zb0ZNQkZKMGxMT1QvK2RRdmpiZFJab09UOGVxSnBXblZEDQpVK1FML3FFWm56NTdOODhPV00zcmFiSmtSTmRVL1o3eDVTRklNOUZycXROOHhld3NpQldCSTBLNlhGdU9CT1REDQo0VjA4bzRUeko4K0NjcTVYbENVVzJMNDhwWk5DWXVCRGZCaDdGeGtCN3FEZ0dEaWFmdEVrWlpmQXBSZzJFK005DQpHOHdrTktUUExEYzR3SDBGRFRpamhneFIzWTRQaVMxSEwyWmh3N2JEM0Nic2xtRUdnZm5uWm9qTmtKdGNMZUJIDQpCTGE1Mi9kU3dOVTRXV0x1YmFZU2lBbUE5SVVNWDEvUnBmcHhPeGQ0WWttaHo5N29GYlVhREpGaXBJZ2d4NXNYDQplUEFsa1RkV252K1JXQnhsSndNUTI1b0VIbVJndU5ZZjRaci9SeHI5Y1M5M1krbWRYSVphQkVFMEtTMmlMUnFhDQpPaVdCa2k5SU1RVTRwaHFQT0JBYUc3QStlUDhQQWdNQkFBR2paakJrTUIwR0ExVWREZ1FXQkJUaDBZSGx6bHBmDQpCS3JTNmJhZFpySEYrcXdzaHpBZkJnTlZIU01FR0RBV2dCVGgwWUhsemxwZkJLclM2YmFkWnJIRitxd3NoekFTDQpCZ05WSFJNQkFmOEVDREFHQVFIL0FnRUVNQTRHQTFVZER3RUIvd1FFQXdJQmhqQU5CZ2txaGtpRzl3MEJBUXNGDQpBQU9DQWdFQUFMSVkxd2tpbHQvdXJmRVZNNXZLenI2dXRPZURXQ1Vjem1XWC9SWDRsanBSZGdGKzVmQUlTNHZIDQp0bVhrcXBTQ09WZVdVckpWOVF2Wm42TDIyN1p3dUUxNWNXaThEQ0RhbDNVZTkwV2dBSkpaTWZUc2hONE9JOGNxDQpXOUU0RUc5d2dsYkV0TW5PYkhsbXM4RjNDSG1ydzNrNkttVWtXR29hKy9FTm1jVmw2OHUvY01SbDFKYlcyYk0rDQovM0ErU0FnMmM2aVBEbGVoY3pLeDJvYTk1UVcwU2tQUFdHdU5BL0NFOENweUFOSWh1OVhGcmozUlEzRXFlUmNTDQpBUVFvZDFSTnVIcGZFVExVL0EyZ01tdm4vdy9zeDdUQjNXNUJQczZycHJPQTM3dHV0UHE5dTZGVFpPY0cxT3FqDQpDL0I3eVRxZ0k3cmJ5dm94N0RFWG9YN3JJaUVxeU5OVWd1VGsvdTNTWjRWWEUya214ZG1TaDNUUXZ5YmZiblhWDQo0SmJDWlZhcWlacmFxYzdvWk1uUm9XclhSRzN6dGJuYmVzLzlxaFJHSTdQcVhxZUtKQnp0eFJURVZqOE9OczFkDQpXTjVzelR3YVBJdmhraE8zQ081RXJVMnJWZFVyODl3S3BOWGJCT0RGS1J0Z3hVVDcwWXBtSjQ2VlZhcWRBaE9aDQpEOUVVVW40WWFlTGFTOEFqU0YvaDdVa2pPaWJOYzRxVkRpUFArcmtlaEZXTTY2UFZuUDFNc2g5M3RjK3RhSWZDDQpFWVZNeGpoOHpOYkZ1b2M3Znp2dnJGSUxMZTdpZnZFSVVxU1ZJQy9BenBsTS9KeHc3YnVYRmVHUDFxVkNCRUhxDQozOTFkLzlSQWZhWjEyemt3RnNsK0lLd0UvT1p4VzhBSGE5aTFwNEdPMFlTTnVjenpFbTQ9DQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tDQo=" },
@@ -69,6 +107,7 @@ foreach ($rp in $regPaths) {
     Set-ItemProperty -Path $rp -Name "Certificate Revocation Check" -Value "NoCheck" -Force -ErrorAction SilentlyContinue
 }
 Write-Host "   [OK] Сертификаты настроены, мягкая проверка включена." -ForegroundColor Green
+}
 
 # -------------------------------------------------------------------------
 # ЭТАП 2: НАСТРОЙКА ЗВУКА И ГАРНИТУРЫ (CITRIX HDX AUDIO)
@@ -118,6 +157,39 @@ function Get-CitrixApp {
             Select-Object -First 1)
 }
 
+function Set-IcaAssociation {
+    $wfica = @(
+        "${env:ProgramFiles(x86)}\Citrix\ICA Client\wfica32.exe",
+        "${env:ProgramFiles}\Citrix\ICA Client\wfica32.exe",
+        "${env:ProgramFiles(x86)}\Citrix\ICA Client\wfcrun32.exe"
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+    if ($wfica) {
+        try {
+            Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.ica\UserChoice" -Force -ErrorAction SilentlyContinue
+            
+            @("HKLM:\SOFTWARE\Classes\.ica", "HKCU:\Software\Classes\.ica") | ForEach-Object {
+                if (-not (Test-Path $_)) { New-Item -Path $_ -Force -ErrorAction SilentlyContinue | Out-Null }
+                Set-ItemProperty -Path $_ -Name "(Default)" -Value "Citrix.ICAClientName" -Force -ErrorAction SilentlyContinue
+                Set-ItemProperty -Path $_ -Name "Content Type" -Value "application/x-ica" -Force -ErrorAction SilentlyContinue
+            }
+
+            @("HKLM:\SOFTWARE\Classes\Citrix.ICAClientName\shell\open\command", "HKCU:\Software\Classes\Citrix.ICAClientName\shell\open\command") | ForEach-Object {
+                if (-not (Test-Path $_)) { New-Item -Path $_ -Recurse -Force -ErrorAction SilentlyContinue | Out-Null }
+                Set-ItemProperty -Path $_ -Name "(Default)" -Value "`"$wfica`" `"%1`"" -Force -ErrorAction SilentlyContinue
+            }
+
+            Start-Process -FilePath $wfica -ArgumentList "/setup" -Wait -ErrorAction SilentlyContinue
+
+            cmd.exe /c "assoc .ica=Citrix.ICAClientName >nul 2>&1"
+            cmd.exe /c "ftype Citrix.ICAClientName=`"$wfica`" `"%1`" >nul 2>&1"
+            Write-Host "   [OK] Файлы .ica привязаны к Citrix Workspace." -ForegroundColor Green
+        } catch {
+            Write-Host "   [!] Не удалось привязать .ica: $_" -ForegroundColor Yellow
+        }
+    }
+}
+
 $citrixApp = Get-CitrixApp
 $installedVersion = if ($citrixApp) { $citrixApp.DisplayVersion } else { $null }
 if (-not $installedVersion) {
@@ -143,6 +215,19 @@ if ($ForceReinstall -or $env:FORCE_CITRIX_REINSTALL -eq "1") {
     if ($isMatch) {
         Write-Host "   [АКТУАЛЬНА] Установлена эталонная версия ($installedVersion)." -ForegroundColor Green
         Write-Host "   Переустановка не требуется!" -ForegroundColor Green
+        Set-IcaAssociation
+        Write-Host ""
+        Write-Host "=================================================================" -ForegroundColor Green
+        Write-Host " [УСПЕХ] Рабочее место MegaFon VDI полностью настроено!" -ForegroundColor Green
+        Write-Host " [OK] Версия Citrix Workspace: $installedVersion" -ForegroundColor Green
+        if ($doInstallCerts) {
+            Write-Host " [OK] Сертификаты Минцифры РФ и Sectigo активны" -ForegroundColor Green
+        } else {
+            Write-Host " [-] Сертификаты: установка пропущена пользователем" -ForegroundColor Yellow
+        }
+        Write-Host " [OK] Аудио и микрофон HDX настроены" -ForegroundColor Green
+        Write-Host " [OK] Файлы .ica привязаны к Citrix" -ForegroundColor Green
+        Write-Host "=================================================================" -ForegroundColor Green
     } else {
         Write-Host "   [НЕСООТВЕТСТВИЕ ВЕРСИИ] Обнаружена версия $installedVersion." -ForegroundColor Red
         Write-Host "   Для VDI МегаФона требуется линейка Citrix Workspace 2402 LTSR CU1 (24.2.4000.x / 24.2.4001.x)." -ForegroundColor Yellow
@@ -322,39 +407,16 @@ if ($needsInstall) {
 
 
     if ($installedSuccessfully) {
-        # Принудительная многоуровневая привязка .ica файлов к Citrix (HKLM + HKCU + UserChoice)
-        $wfica = @(
-            "${env:ProgramFiles(x86)}\Citrix\ICA Client\wfica32.exe",
-            "${env:ProgramFiles}\Citrix\ICA Client\wfica32.exe",
-            "${env:ProgramFiles(x86)}\Citrix\ICA Client\wfcrun32.exe"
-        ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-
-        if ($wfica) {
-            try {
-                Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.ica\UserChoice" -Force -ErrorAction SilentlyContinue
-                
-                @("HKLM:\SOFTWARE\Classes\.ica", "HKCU:\Software\Classes\.ica") | ForEach-Object {
-                    if (-not (Test-Path $_)) { New-Item -Path $_ -Force -ErrorAction SilentlyContinue | Out-Null }
-                    Set-ItemProperty -Path $_ -Name "(Default)" -Value "Citrix.ICAClientName" -Force -ErrorAction SilentlyContinue
-                    Set-ItemProperty -Path $_ -Name "Content Type" -Value "application/x-ica" -Force -ErrorAction SilentlyContinue
-                }
-
-                @("HKLM:\SOFTWARE\Classes\Citrix.ICAClientName\shell\open\command", "HKCU:\Software\Classes\Citrix.ICAClientName\shell\open\command") | ForEach-Object {
-                    if (-not (Test-Path $_)) { New-Item -Path $_ -Recurse -Force -ErrorAction SilentlyContinue | Out-Null }
-                    Set-ItemProperty -Path $_ -Name "(Default)" -Value "`"$wfica`" `"%1`"" -Force -ErrorAction SilentlyContinue
-                }
-
-                Start-Process -FilePath $wfica -ArgumentList "/setup" -Wait -ErrorAction SilentlyContinue
-
-                cmd.exe /c "assoc .ica=Citrix.ICAClientName >nul 2>&1"
-                cmd.exe /c "ftype Citrix.ICAClientName=`"$wfica`" `"%1`" >nul 2>&1"
-            } catch {}
-        }
+        Set-IcaAssociation
 
         Write-Host ""
         Write-Host "=================================================================" -ForegroundColor Green
         Write-Host " [УСПЕХ] Чистый Citrix Workspace v$detectedVer установлен и готов к работе!" -ForegroundColor Green
-        Write-Host " [OK] Сертификаты Минцифры РФ и Sectigo активны" -ForegroundColor Green
+        if ($doInstallCerts) {
+            Write-Host " [OK] Сертификаты Минцифры РФ и Sectigo активны" -ForegroundColor Green
+        } else {
+            Write-Host " [-] Сертификаты: установка пропущена пользователем" -ForegroundColor Yellow
+        }
         Write-Host " [OK] Аудио и микрофон HDX настроены" -ForegroundColor Green
         Write-Host " [OK] Файлы .ica привязаны к Citrix" -ForegroundColor Green
         Write-Host "=================================================================" -ForegroundColor Green
