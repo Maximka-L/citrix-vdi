@@ -1,4 +1,4 @@
-﻿# =========================================================================
+# =========================================================================
 # CITRIX WORKSPACE WEB INSTALLER & REPAIR (MEGAFON VDI)
 # Репозиторий: https://github.com/Maximka-L/citrix-vdi
 # =========================================================================
@@ -20,7 +20,7 @@ Write-Host "=================================================================" -
 Write-Host ""
 
 $DownloadUrl = "https://github.com/Maximka-L/citrix-vdi/releases/download/v1.0/CitrixWorkspaceFullInstaller.exe"
-$TargetVersionStr = "24.2.4000.4020"
+$TargetVersionStr = "2402 LTSR CU1 (24.2.4000.x / 24.2.4001.x)"
 $TempInstallerPath = Join-Path $env:TEMP "CitrixWorkspaceFullInstaller.exe"
 
 # -------------------------------------------------------------------------
@@ -129,17 +129,17 @@ if ($ForceReinstall -or $env:FORCE_CITRIX_REINSTALL -eq "1") {
     $needsInstall = $true
 } elseif ($installedVersion) {
     Write-Host "   Текущая версия Citrix        : $installedVersion" -ForegroundColor White
-    Write-Host "   Эталонная версия для VDI     : $TargetVersionStr (LTSR CU1)" -ForegroundColor White
+    Write-Host "   Эталонная версия для VDI     : $TargetVersionStr" -ForegroundColor White
 
     $instVer = Convert-ToVersionObject $installedVersion
-    $isMatch = ($installedVersion -like "24.2.4000*") -or ($instVer -and $instVer.Major -eq 24 -and $instVer.Minor -eq 2 -and $instVer.Build -eq 4000)
+    $isMatch = ($installedVersion -like "24.2.4000*") -or ($installedVersion -like "24.2.4001*") -or ($instVer -and $instVer.Major -eq 24 -and $instVer.Minor -eq 2 -and ($instVer.Build -ge 4000 -and $instVer.Build -le 4001))
 
     if ($isMatch) {
         Write-Host "   [АКТУАЛЬНА] Установлена эталонная версия ($installedVersion)." -ForegroundColor Green
         Write-Host "   Переустановка не требуется!" -ForegroundColor Green
     } else {
         Write-Host "   [НЕСООТВЕТСТВИЕ ВЕРСИИ] Обнаружена версия $installedVersion." -ForegroundColor Red
-        Write-Host "   Для VDI МегаФона требуется строго $TargetVersionStr." -ForegroundColor Yellow
+        Write-Host "   Для VDI МегаФона требуется линейка Citrix Workspace 2402 LTSR CU1 (24.2.4000.x / 24.2.4001.x)." -ForegroundColor Yellow
         Write-Host "   -> Запуск полной зачистки и установка эталонной версии..." -ForegroundColor Yellow
         $needsInstall = $true
     }
