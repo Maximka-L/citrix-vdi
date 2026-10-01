@@ -238,20 +238,29 @@ if ($ForceReinstall -or $env:FORCE_CITRIX_REINSTALL -eq "1") {
 
     if ($isMatch) {
         Write-Host "   [АКТУАЛЬНА] Установлена корпоративная эталонная версия ($installedVersion)." -ForegroundColor Green
-        Write-Host "   Переустановка не требуется!" -ForegroundColor Green
-        Set-IcaAssociation
+        
         Write-Host ""
-        Write-Host "=================================================================" -ForegroundColor Green
-        Write-Host " [УСПЕХ] Рабочее место MegaFon VDI полностью настроено!" -ForegroundColor Green
-        Write-Host " [OK] Версия Citrix Workspace: $installedVersion" -ForegroundColor Green
-        if ($doInstallCerts) {
-            Write-Host " [OK] Сертификаты Минцифры РФ и Sectigo активны" -ForegroundColor Green
+        Write-Host "   Версия уже установлена. Требуется ли переустановка (восстановление)? [Y/N] (По умолчанию: N): " -ForegroundColor Cyan -NoNewline
+        $ans = Read-Host
+        if ($ans -match "^[yydд]$") {
+            Write-Host "   -> Запуск чистой переустановки эталонной версии..." -ForegroundColor Yellow
+            $needsInstall = $true
         } else {
-            Write-Host " [-] Сертификаты: установка пропущена пользователем" -ForegroundColor Yellow
+            Write-Host "   Переустановка пропущена. Фиксация настроек..." -ForegroundColor Gray
+            Set-IcaAssociation
+            Write-Host ""
+            Write-Host "=================================================================" -ForegroundColor Green
+            Write-Host " [УСПЕХ] Рабочее место MegaFon VDI полностью настроено!" -ForegroundColor Green
+            Write-Host " [OK] Версия Citrix Workspace: $installedVersion" -ForegroundColor Green
+            if ($doInstallCerts) {
+                Write-Host " [OK] Сертификаты Минцифры РФ и Sectigo активны" -ForegroundColor Green
+            } else {
+                Write-Host " [-] Сертификаты: установка пропущена пользователем" -ForegroundColor Yellow
+            }
+            Write-Host " [OK] Аудио и микрофон HDX настроены" -ForegroundColor Green
+            Write-Host " [OK] Файлы .ica привязаны к Citrix" -ForegroundColor Green
+            Write-Host "=================================================================" -ForegroundColor Green
         }
-        Write-Host " [OK] Аудио и микрофон HDX настроены" -ForegroundColor Green
-        Write-Host " [OK] Файлы .ica привязаны к Citrix" -ForegroundColor Green
-        Write-Host "=================================================================" -ForegroundColor Green
     } else {
         Write-Host "   [НЕСООТВЕТСТВИЕ ВЕРСИИ] Обнаружена версия $installedVersion." -ForegroundColor Red
         Write-Host "   Для VDI МегаФона требуется корпоративная версия Citrix Workspace 2402 LTSR CU1 ($TargetVersionStr)." -ForegroundColor Yellow
