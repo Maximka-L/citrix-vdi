@@ -67,16 +67,20 @@ smPi9WIsgtRqAEFQ8TmDn5XpNpaYbg==
 EOF
 
 echo "[2/4] Добавление сертификатов в системную Связку ключей (System Keychain)..."
-# Добавление в системное хранилище (Admin Domain) с явным доверием для SSL
-$SUDO_CMD security add-trusted-cert -d -r trustRoot -p ssl -p basic -k /Library/Keychains/System.keychain "$TMP_DIR/russian_root.cer"
-$SUDO_CMD security add-trusted-cert -d -r trustRoot -p ssl -p basic -k /Library/Keychains/System.keychain "$TMP_DIR/russian_sub.cer"
-$SUDO_CMD security add-trusted-cert -d -r trustRoot -p ssl -p basic -k /Library/Keychains/System.keychain "$TMP_DIR/aaa_root.crt"
+# 1. Импорт сертификатов в System Keychain
+$SUDO_CMD security add-certificate -k /Library/Keychains/System.keychain "$TMP_DIR/russian_root.cer" 2>/dev/null || true
+$SUDO_CMD security add-certificate -k /Library/Keychains/System.keychain "$TMP_DIR/russian_sub.cer" 2>/dev/null || true
+$SUDO_CMD security add-certificate -k /Library/Keychains/System.keychain "$TMP_DIR/aaa_root.crt" 2>/dev/null || true
 
-# Добавление в пользовательское хранилище текущего пользователя
-security add-trusted-cert -r trustRoot -p ssl -p basic "$TMP_DIR/russian_root.cer" 2>/dev/null || true
-security add-trusted-cert -r trustRoot -p ssl -p basic "$TMP_DIR/russian_sub.cer" 2>/dev/null || true
-security add-trusted-cert -r trustRoot -p ssl -p basic "$TMP_DIR/aaa_root.crt" 2>/dev/null || true
-echo "  [OK] Все сертификаты успешно зарегистрированы и помечены как доверенные для SSL."
+# 2. Установка полного доверия (trustRoot) без конфликтующих флагов
+$SUDO_CMD security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "$TMP_DIR/russian_root.cer"
+$SUDO_CMD security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "$TMP_DIR/russian_sub.cer"
+$SUDO_CMD security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "$TMP_DIR/aaa_root.crt"
+
+# 3. Также добавляем в связку пользователя для гарантированного доверия в профиле
+security add-certificate -k ~/Library/Keychains/login.keychain-db "$TMP_DIR/russian_root.cer" 2>/dev/null || true
+security add-certificate -k ~/Library/Keychains/login.keychain-db "$TMP_DIR/russian_sub.cer" 2>/dev/null || true
+echo "  [OK] Сертификаты зарегистрированы и установлены в доверенные."
 
 echo "[3/4] Исправление настроек Citrix Workspace..."
 killall "Citrix Viewer" "Citrix Workspace" "AuthManager_Mac" "ServiceRecords" 2>/dev/null || true
