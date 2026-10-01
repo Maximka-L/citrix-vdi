@@ -1,6 +1,6 @@
 # 🚀 Citrix Workspace Auto-Installer & VDI Repair (MegaFon)
 
-Автоматизированное решение для тихой веб-установки, глубокой очистки и устранения ошибок подключения к **MegaFon VDI** (`vdi2.megafon.ru`, `ica2-ext.megafon.ru`) на компьютерах под управлением Windows 10 / 11.
+Автоматизированное решение для тихой веб-установки, глубокой очистки и устранения ошибок подключения к **MegaFon VDI** (`vdi2.megafon.ru`, `ica2-ext.megafon.ru`) на компьютерах под управлением Windows 10 / 11 и macOS.
 
 ---
 
@@ -25,6 +25,26 @@
 ```powershell
 powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/Maximka-L/citrix-vdi/main/install.ps1 | iex"
 ```
+
+---
+
+## 🍎 Вариант 3: Для пользователей macOS (в 1 команду)
+
+Если на Mac появляется ошибка *«There is no Citrix SSL Server configured on the specified address»* или сессия вылетает:
+
+Откройте **Терминал** (`Cmd + Пробел` → ввести `Терминал` → Enter) и выполните:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Maximka-L/citrix-vdi/main/mac.sh)"
+```
+
+Скрипт:
+1. Запросит пароль администратора Mac.
+2. Установит корневые и промежуточные сертификаты Минцифры РФ и Sectigo в системную Связку ключей (`System.keychain`) со статусом «Всегда доверять».
+3. Отключит баг фонового логирования AOT Citrix (`EnableAOTLog`), приводящий к сбоям на macOS.
+4. Проверит доступность шлюзов МегаФон VDI.
+
+Также можно скачать файл **[Починить_Citrix_Mac.command](https://raw.githubusercontent.com/Maximka-L/citrix-vdi/main/Починить_Citrix_Mac.command)** и запустить его двойным кликом в Finder.
 
 ---
 
