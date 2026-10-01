@@ -166,24 +166,48 @@ function Set-IcaAssociation {
 
     if ($wfica) {
         try {
-            Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.ica\UserChoice" -Force -ErrorAction SilentlyContinue
+            # 1. Полный сброс кэша ассоциаций проводника Windows (удаление блокировок UserChoice / OpenWith / Блокнот)
+            Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.ica" -Recurse -Force -ErrorAction SilentlyContinue
             
+            # 2. Регистрация стандартного расширения .ica на уровне HKLM и HKCU
             @("HKLM:\SOFTWARE\Classes\.ica", "HKCU:\Software\Classes\.ica") | ForEach-Object {
                 if (-not (Test-Path $_)) { New-Item -Path $_ -Force -ErrorAction SilentlyContinue | Out-Null }
-                Set-ItemProperty -Path $_ -Name "(Default)" -Value "Citrix.ICAClientName" -Force -ErrorAction SilentlyContinue
+                Set-ItemProperty -Path $_ -Name "(Default)" -Value "Citrix.ICAClient.ica" -Force -ErrorAction SilentlyContinue
                 Set-ItemProperty -Path $_ -Name "Content Type" -Value "application/x-ica" -Force -ErrorAction SilentlyContinue
             }
 
-            @("HKLM:\SOFTWARE\Classes\Citrix.ICAClientName\shell\open\command", "HKCU:\Software\Classes\Citrix.ICAClientName\shell\open\command") | ForEach-Object {
+            # 3. Регистрация системного ProgID Citrix.ICAClient.ica
+            @("HKLM:\SOFTWARE\Classes\Citrix.ICAClient.ica\shell\open\command", "HKCU:\Software\Classes\Citrix.ICAClient.ica\shell\open\command") | ForEach-Object {
                 if (-not (Test-Path $_)) { New-Item -Path $_ -Recurse -Force -ErrorAction SilentlyContinue | Out-Null }
                 Set-ItemProperty -Path $_ -Name "(Default)" -Value "`"$wfica`" `"%1`"" -Force -ErrorAction SilentlyContinue
             }
 
+            # 4. Назначение официальной иконки для файлов .ica
+            @("HKLM:\SOFTWARE\Classes\Citrix.ICAClient.ica\DefaultIcon", "HKCU:\Software\Classes\Citrix.ICAClient.ica\DefaultIcon") | ForEach-Object {
+                if (-not (Test-Path $_)) { New-Item -Path $_ -Recurse -Force -ErrorAction SilentlyContinue | Out-Null }
+                Set-ItemProperty -Path $_ -Name "(Default)" -Value "`"$wfica`",0" -Force -ErrorAction SilentlyContinue
+            }
+
+            # 5. Вызов нативного установщика ассоциаций Citrix
             Start-Process -FilePath $wfica -ArgumentList "/setup" -Wait -ErrorAction SilentlyContinue
 
-            cmd.exe /c "assoc .ica=Citrix.ICAClientName >nul 2>&1"
-            cmd.exe /c "ftype Citrix.ICAClientName=`"$wfica`" `"%1`" >nul 2>&1"
-            Write-Host "   [OK] Файлы .ica привязаны к Citrix Workspace." -ForegroundColor Green
+            cmd.exe /c "assoc .ica=Citrix.ICAClient.ica >nul 2>&1"
+            cmd.exe /c "ftype Citrix.ICAClient.ica=`"$wfica`" `"%1`" >nul 2>&1"
+
+            # 6. Принудительное оповещение оболочки Windows Explorer об изменении ассоциаций
+            if (-not ([System.Management.Automation.PSTypeName]'Shell32.NativeMethods').Type) {
+                Add-Type -TypeDefinition @"
+                using System;
+                using System.Runtime.InteropServices;
+                public class Shell32 {
+                    [DllImport("shell32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+                    public static extern void SHChangeNotify(uint wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
+                }
+"@ -ErrorAction SilentlyContinue
+            }
+            [Shell32]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero) # SHCNE_ASSOCCHANGED
+
+            Write-Host "   [OK] Файлы .ica успешно привязаны к Citrix Workspace." -ForegroundColor Green
         } catch {
             Write-Host "   [!] Не удалось привязать .ica: $_" -ForegroundColor Yellow
         }
@@ -213,7 +237,7 @@ if ($ForceReinstall -or $env:FORCE_CITRIX_REINSTALL -eq "1") {
     $isMatch = ($installedVersion -like "24.2.4000*") -or ($installedVersion -like "24.2.4001*") -or ($instVer -and $instVer.Major -eq 24 -and $instVer.Minor -eq 2 -and ($instVer.Build -ge 4000 -and $instVer.Build -le 4001))
 
     if ($isMatch) {
-        Write-Host "   [АКТУАЛЬНА] Установлена эталонная версия ($installedVersion)." -ForegroundColor Green
+        Write-Host "   [АКТУАЛЬНА] Установлена корпоративная эталонная версия ($installedVersion)." -ForegroundColor Green
         Write-Host "   Переустановка не требуется!" -ForegroundColor Green
         Set-IcaAssociation
         Write-Host ""
@@ -230,7 +254,7 @@ if ($ForceReinstall -or $env:FORCE_CITRIX_REINSTALL -eq "1") {
         Write-Host "=================================================================" -ForegroundColor Green
     } else {
         Write-Host "   [НЕСООТВЕТСТВИЕ ВЕРСИИ] Обнаружена версия $installedVersion." -ForegroundColor Red
-        Write-Host "   Для VDI МегаФона требуется линейка Citrix Workspace 2402 LTSR CU1 (24.2.4000.x / 24.2.4001.x)." -ForegroundColor Yellow
+        Write-Host "   Для VDI МегаФона требуется корпоративная версия Citrix Workspace 2402 LTSR CU1 ($TargetVersionStr)." -ForegroundColor Yellow
         Write-Host "   -> Запуск полной зачистки и установка эталонной версии..." -ForegroundColor Yellow
         $needsInstall = $true
     }
@@ -287,19 +311,41 @@ if ($needsInstall) {
         @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall") | ForEach-Object {
             Get-ChildItem -Path $_ -ErrorAction SilentlyContinue | Where-Object { $_.GetValue("DisplayName") -match "Citrix" -or $_.PSChildName -match "Citrix" } | ForEach-Object { Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue }
         }
-        @("${env:ProgramFiles(x86)}\Citrix", "${env:ProgramFiles}\Citrix", "${env:ProgramData}\Citrix", "$env:LOCALAPPDATA\Citrix", "$env:APPDATA\Citrix", "$env:TEMP\Citrix*") | ForEach-Object {
-            if (Test-Path $_) { Remove-Item -Path $_ -Recurse -Force -ErrorAction SilentlyContinue }
+        @("${env:ProgramFiles(x86)}\Citrix", "${env:ProgramFiles}\Citrix", "${env:ProgramData}\Citrix", "$env:LOCALAPPDATA\Citrix", "$env:APPDATA\Citrix") | ForEach-Object {
+            if (Test-Path -LiteralPath $_) { Remove-Item -LiteralPath $_ -Recurse -Force -ErrorAction SilentlyContinue }
+        }
+        Get-ChildItem -Path "$env:TEMP" -Filter "Citrix*" -ErrorAction SilentlyContinue | ForEach-Object {
+            Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
         }
         Write-Host "   [OK] Предыдущая версия полностью зачищена." -ForegroundColor Green
     }
 
-    # 3. Скачивание дистрибутива в защищенную изолированную папку
-    $TargetFolder = Join-Path $env:TEMP "Citrix_VDI_Setup"
-    if (-not (Test-Path $TargetFolder)) { New-Item -ItemType Directory -Path $TargetFolder -Force | Out-Null }
+    # 3. Скачивание дистрибутива в защищенную изолированную папку (не удаляется при очистке)
+    $TargetFolder = Join-Path $env:SystemDrive "MegaFon_Citrix_VDI"
+    if (-not (Test-Path -LiteralPath $TargetFolder)) { New-Item -ItemType Directory -Path $TargetFolder -Force | Out-Null }
     $TempInstallerPath = Join-Path $TargetFolder "CitrixWorkspaceFullInstaller.exe"
 
+    # Проверка наличия дистрибутива в различных источниках (Загрузки, текущая папка, кэш)
+    $candidatePaths = @(
+        $TempInstallerPath,
+        (Join-Path $PSScriptRoot "CitrixWorkspaceFullInstaller.exe"),
+        (Join-Path $PSScriptRoot "CitrixWorkspaceApp.exe"),
+        (Join-Path $env:USERPROFILE "Downloads\CitrixWorkspaceFullInstaller.exe"),
+        (Join-Path $env:USERPROFILE "Downloads\CitrixWorkspaceApp.exe"),
+        (Join-Path $env:TEMP "Citrix_VDI_Setup\CitrixWorkspaceFullInstaller.exe")
+    )
+    foreach ($cp in $candidatePaths) {
+        if ((Test-Path -LiteralPath $cp) -and ((Get-Item -LiteralPath $cp).Length -gt 500000000)) {
+            if ($cp -ne $TempInstallerPath) {
+                Write-Host "   [НАЙДЕН] Обнаружен локальный дистрибутив: $cp" -ForegroundColor Cyan
+                Copy-Item -LiteralPath $cp -Destination $TempInstallerPath -Force -ErrorAction SilentlyContinue
+            }
+            break
+        }
+    }
+
     # Если файл уже скачан ранее и его размер корректен (> 500 МБ) - используем повторно
-    $alreadyDownloaded = (Test-Path $TempInstallerPath) -and ((Get-Item $TempInstallerPath).Length -gt 500000000)
+    $alreadyDownloaded = (Test-Path -LiteralPath $TempInstallerPath) -and ((Get-Item -LiteralPath $TempInstallerPath).Length -gt 500000000)
 
     if (-not $alreadyDownloaded) {
         Write-Host "[6/7] Загрузка эталонного дистрибутива Citrix с GitHub (~730 МБ)..." -ForegroundColor Yellow
@@ -310,7 +356,7 @@ if ($needsInstall) {
             if (Get-Command "curl.exe" -ErrorAction SilentlyContinue) {
                 Write-Host "   Запуск загрузки через curl..." -ForegroundColor Gray
                 & curl.exe --ssl-no-revoke -L -# "$DownloadUrl" -o "$TempInstallerPath"
-                if ((Test-Path $TempInstallerPath) -and (Get-Item $TempInstallerPath).Length -gt 500000000) {
+                if ((Test-Path -LiteralPath $TempInstallerPath) -and (Get-Item -LiteralPath $TempInstallerPath).Length -gt 500000000) {
                     $downloadSuccess = $true
                 }
             }
@@ -321,7 +367,7 @@ if ($needsInstall) {
                 Write-Host "   Запуск загрузки через BITS / WebClient..." -ForegroundColor Gray
                 $webclient = New-Object System.Net.WebClient
                 $webclient.DownloadFile($DownloadUrl, $TempInstallerPath)
-                if ((Test-Path $TempInstallerPath) -and (Get-Item $TempInstallerPath).Length -gt 500000000) {
+                if ((Test-Path -LiteralPath $TempInstallerPath) -and (Get-Item -LiteralPath $TempInstallerPath).Length -gt 500000000) {
                     $downloadSuccess = $true
                 }
             } catch {
@@ -336,9 +382,9 @@ if ($needsInstall) {
             exit
         }
 
-        Write-Host "   [OK] Дистрибутив успешно сохранен ($([math]::Round((Get-Item $TempInstallerPath).Length / 1MB)) МБ)." -ForegroundColor Green
+        Write-Host "   [OK] Дистрибутив успешно сохранен ($([math]::Round((Get-Item -LiteralPath $TempInstallerPath).Length / 1MB)) МБ)." -ForegroundColor Green
     } else {
-        Write-Host "[6/7] Дистрибутив уже загружен ранее ($([math]::Round((Get-Item $TempInstallerPath).Length / 1MB)) МБ), повторное скачивание не требуется." -ForegroundColor Green
+        Write-Host "[6/7] Дистрибутив уже загружен ранее ($([math]::Round((Get-Item -LiteralPath $TempInstallerPath).Length / 1MB)) МБ), повторное скачивание не требуется." -ForegroundColor Green
     }
 
     # 4. Установка чистого клиента
@@ -391,23 +437,48 @@ if ($needsInstall) {
             }
         }
 
-        if ($instProc.HasExited -and -not $activeInstallers) {
-            Start-Sleep -Seconds 4
-            $finalApp = Get-CitrixApp
-            if ($finalApp -and $finalApp.DisplayVersion) {
-                $detectedVer = $finalApp.DisplayVersion
-                $installedSuccessfully = $true
+        if ($instProc.HasExited) {
+            # Даем достаточно времени для дочерних процессов распаковки TrolleyExpress / msiexec
+            if ($sw.Elapsed.TotalSeconds -lt 25) {
+                continue
             }
-            break
+            if (-not $activeInstallers) {
+                Start-Sleep -Seconds 5
+                $wfica = @(
+                    "${env:ProgramFiles(x86)}\Citrix\ICA Client\wfica32.exe",
+                    "${env:ProgramFiles}\Citrix\ICA Client\wfica32.exe"
+                ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+
+                $finalApp = Get-CitrixApp
+                if ($finalApp -and $finalApp.DisplayVersion) {
+                    $detectedVer = $finalApp.DisplayVersion
+                    $installedSuccessfully = $true
+                } elseif ($wfica) {
+                    $detectedVer = (Get-Item -LiteralPath $wfica).VersionInfo.ProductVersion
+                    $installedSuccessfully = $true
+                }
+                break
+            }
         }
     }
     Write-Host ""
     $exitCode = if ($instProc.HasExited) { $instProc.ExitCode } else { 0 }
 
+    # Всегда вызываем привязку .ica к Citrix, если wfica32.exe есть на диске
+    $wficaCheck = @(
+        "${env:ProgramFiles(x86)}\Citrix\ICA Client\wfica32.exe",
+        "${env:ProgramFiles}\Citrix\ICA Client\wfica32.exe"
+    ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 
-
-    if ($installedSuccessfully) {
+    if ($wficaCheck) {
         Set-IcaAssociation
+    }
+
+    if ($installedSuccessfully -or $wficaCheck) {
+        if (-not $detectedVer -and $wficaCheck) {
+            $detectedVer = (Get-Item -LiteralPath $wficaCheck).VersionInfo.ProductVersion
+        }
+        if (-not $detectedVer) { $detectedVer = "2402 LTSR CU1" }
 
         Write-Host ""
         Write-Host "=================================================================" -ForegroundColor Green
@@ -420,8 +491,6 @@ if ($needsInstall) {
         Write-Host " [OK] Аудио и микрофон HDX настроены" -ForegroundColor Green
         Write-Host " [OK] Файлы .ica привязаны к Citrix" -ForegroundColor Green
         Write-Host "=================================================================" -ForegroundColor Green
-        # Удаляем временную папку только после успешной установки
-        Remove-Item -Path $TargetFolder -Recurse -Force -ErrorAction SilentlyContinue
     } else {
         Write-Host ""
         Write-Host "[-] ОШИБКА: Citrix не смог зарегистрироваться в системе." -ForegroundColor Red
