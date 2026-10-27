@@ -58,6 +58,24 @@
 			<key>PayloadVersion</key>
 			<integer>1</integer>
 		</dict>
+		<dict>
+			<key>PayloadCertificateFileName</key>
+			<string>SSLcom-TLS-Issuing-RSA-CA-R1.cer</string>
+			<key>PayloadContent</key>
+			<data>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</data>
+			<key>PayloadDescription</key>
+			<string>Промежуточный корень SSL.com TLS Issuing RSA CA R1</string>
+			<key>PayloadDisplayName</key>
+			<string>SSL.com TLS Issuing RSA CA R1</string>
+			<key>PayloadIdentifier</key>
+			<string>com.apple.security.pkcs1.sslcom-tls-issuing-rsa-ca-r1</string>
+			<key>PayloadType</key>
+			<string>com.apple.security.pkcs1</string>
+			<key>PayloadUUID</key>
+			<string>5c7e189a-09d2-432a-a924-f58c79ba9477</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
+		</dict>
 	</array>
 	<key>PayloadDescription</key>
 	<string>Установка доверенных сертификатов Минцифры РФ и SSL.com для подключения к MegaFon VDI</string>
