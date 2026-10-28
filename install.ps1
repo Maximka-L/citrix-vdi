@@ -278,18 +278,23 @@ if ($ForceReinstall -or $env:FORCE_CITRIX_REINSTALL -eq "1") {
 # -------------------------------------------------------------------------
 if ($needsInstall) {
     # 1. Проверка 360 Total Security
-    $av360 = Get-Process -Name "360tray", "360sd", "ZHPRTP", "ZhuDongFangYu", "360rp", "360Safe" -ErrorAction SilentlyContinue
+    $avList = @()
+        if (Get-Process -Name "avp", "avpui", "kav", "kis", "kfa" -ErrorAction SilentlyContinue) { $avList += "Лаборатория Касперского (Kaspersky)" }
+        if (Get-Process -Name "360tray", "360sd", "ZHPRTP", "ZhuDongFangYu", "360rp", "360Safe" -ErrorAction SilentlyContinue) { $avList += "360 Total Security" }
+        if (Get-Process -Name "dwengine", "drweb", "spideragent" -ErrorAction SilentlyContinue) { $avList += "Dr.Web" }
+        if (Get-Process -Name "ekrn", "egui" -ErrorAction SilentlyContinue) { $avList += "ESET NOD32" }
+        $av360 = if ($avList.Count -gt 0) { $true } else { $null }
     if ($av360) {
         Write-Host ""
         Write-Host "=================================================================" -ForegroundColor Yellow
-        Write-Host " [ВНИМАНИЕ] ОБНАРУЖЕН АКТИВНЫЙ АНТИВИРУС 360 TOTAL SECURITY!" -ForegroundColor Red
-        Write-Host " Проактивная защита 360 блокирует тихую установку драйверов Citrix" -ForegroundColor Yellow
+        Write-Host " [ВНИМАНИЕ] ОБНАРУЖЕН АКТИВНЫЙ АНТИВИРУС ($($avList -join ", "))!" -ForegroundColor Red
+        Write-Host " Проактивная защита антивируса может блокировать тихую установку драйверов Citrix" -ForegroundColor Yellow
         Write-Host " (ошибка 1603) и запрещает регистрацию компонентов в реестре." -ForegroundColor Yellow
         Write-Host ""
         Write-Host " ЧТО НЕОБХОДИМО СДЕЛАТЬ ПРЯМО СЕЙЧАС:" -ForegroundColor White
-        Write-Host " 1. В правом нижнем углу экрана (в трее у часов) найдите значок 360." -ForegroundColor Cyan
+        Write-Host " 1. В правом нижнем углу экрана (в трее у часов) найдите значок антивируса." -ForegroundColor Cyan
         Write-Host " 2. Кликните правой кнопкой мыши -> выключите защиту (на 15 минут)." -ForegroundColor Cyan
-        Write-Host " 3. Если во время установки появится окно 360 -> выберите 'РАЗРЕШИТЬ'." -ForegroundColor Green
+        Write-Host " 3. Если во время установки появится окно антивируса -> выберите 'РАЗРЕШИТЬ'." -ForegroundColor Green
         Write-Host "=================================================================" -ForegroundColor Yellow
         Write-Host ""
         Write-Host ">>> Приостановите защиту 360 в трее и нажмите ENTER для продолжения... " -ForegroundColor Yellow -NoNewline
