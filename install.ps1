@@ -1,4 +1,4 @@
-﻿# =========================================================================
+﻿﻿# =========================================================================
 # CITRIX WORKSPACE WEB INSTALLER & REPAIR (MEGAFON VDI)
 # Репозиторий: https://github.com/Maximka-L/citrix-vdi
 # =========================================================================
@@ -350,7 +350,7 @@ if ($needsInstall) {
         (Join-Path $env:TEMP "Citrix_VDI_Setup\CitrixWorkspaceFullInstaller.exe")
     )
     foreach ($cp in $candidatePaths) {
-        if ((Test-Path -LiteralPath $cp) -and ((Get-Item -LiteralPath $cp).Length -gt 500000000)) {
+        if ((Test-Path -LiteralPath $cp) -and ((Get-Item -LiteralPath $cp).Length -gt 740000000)) {
             if ($cp -ne $TempInstallerPath) {
                 Write-Host "   [НАЙДЕН] Обнаружен локальный дистрибутив: $cp" -ForegroundColor Cyan
                 Copy-Item -LiteralPath $cp -Destination $TempInstallerPath -Force -ErrorAction SilentlyContinue
@@ -360,7 +360,7 @@ if ($needsInstall) {
     }
 
     # Если файл уже скачан ранее и его размер корректен (> 500 МБ) - используем повторно
-    $alreadyDownloaded = (Test-Path -LiteralPath $TempInstallerPath) -and ((Get-Item -LiteralPath $TempInstallerPath).Length -gt 500000000)
+    $alreadyDownloaded = (Test-Path -LiteralPath $TempInstallerPath) -and ((Get-Item -LiteralPath $TempInstallerPath).Length -gt 740000000)
 
     if (-not $alreadyDownloaded) {
         Write-Host "[6/7] Загрузка эталонного дистрибутива Citrix с GitHub (~730 МБ)..." -ForegroundColor Yellow
@@ -370,8 +370,8 @@ if ($needsInstall) {
         try {
             if (Get-Command "curl.exe" -ErrorAction SilentlyContinue) {
                 Write-Host "   Запуск загрузки через curl..." -ForegroundColor Gray
-                & curl.exe --ssl-no-revoke -L -# "$DownloadUrl" -o "$TempInstallerPath"
-                if ((Test-Path -LiteralPath $TempInstallerPath) -and (Get-Item -LiteralPath $TempInstallerPath).Length -gt 500000000) {
+                & curl.exe --ssl-no-revoke -L -C - --retry 5 -# "$DownloadUrl" -o "$TempInstallerPath"
+                if ((Test-Path -LiteralPath $TempInstallerPath) -and (Get-Item -LiteralPath $TempInstallerPath).Length -gt 740000000) {
                     $downloadSuccess = $true
                 }
             }
@@ -382,7 +382,7 @@ if ($needsInstall) {
                 Write-Host "   Запуск загрузки через BITS / WebClient..." -ForegroundColor Gray
                 $webclient = New-Object System.Net.WebClient
                 $webclient.DownloadFile($DownloadUrl, $TempInstallerPath)
-                if ((Test-Path -LiteralPath $TempInstallerPath) -and (Get-Item -LiteralPath $TempInstallerPath).Length -gt 500000000) {
+                if ((Test-Path -LiteralPath $TempInstallerPath) -and (Get-Item -LiteralPath $TempInstallerPath).Length -gt 740000000) {
                     $downloadSuccess = $true
                 }
             } catch {
